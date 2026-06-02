@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "640378667893",
+    "project_id": "spaceapp-9202a",
+    "storage_bucket": "spaceapp-9202a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:640378667893:android:c23932d86ae598b91a093c",
+        "android_client_info": {
+          "package_name": "com.iintuitlabs.space"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "640378667893-b3ggoc4o7m8j29h6pbvt6ej13kh65rfk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.iintuitlabs.space",
+            "certificate_hash": "790504754b18fc666bab61daf0d23cda70278a2f"
+          }
+        },
+        {
+          "client_id": "640378667893-h982si66dp9v2fmeu6b0dquktg7hsf6a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAv-JSAb23AbGn16bnz4oJMiZRMy9uoU7s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "640378667893-h982si66dp9v2fmeu6b0dquktg7hsf6a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
