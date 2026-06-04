@@ -12,11 +12,11 @@ import {
   ScrollView,
   Platform,
   Dimensions,
-  BackHandler,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
@@ -44,14 +44,6 @@ export default function Notes({
   setNotesSearchTerm,
   notesShowSearch,
   setNotesShowSearch,
-  editingNote,
-  setEditingNote,
-  editingNoteText,
-  setEditingNoteText,
-  editingNoteTitle,
-  setEditingNoteTitle,
-  onEditingPostColorChange,
-  onCloseSidebar,
   isDarkTheme = false,
   createNote,
   updateNote,
@@ -61,40 +53,7 @@ export default function Notes({
   archiveNote,
   updateFontSize,
 }) {
-  const scrollViewRef = useRef(null);
-  const textInputRef = useRef(null);
-
-  useEffect(() => {
-    if (onEditingPostColorChange) {
-      onEditingPostColorChange(editingNote?.color || null);
-    }
-  }, [editingNote, onEditingPostColorChange]);
-
-  useEffect(() => {
-    const backAction = () => {
-      if (editingNote !== null) {
-        const hasChanges =
-          editingNoteTitle !== editingNote.title ||
-          editingNoteText !== editingNote.sentence;
-
-        if (hasChanges) {
-          saveCurrentEdit();
-        }
-        setEditingNote(null);
-        setEditingNoteText("");
-        setEditingNoteTitle("");
-        return true;
-      }
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction,
-    );
-
-    return () => backHandler.remove();
-  }, [editingNote, editingNoteText, editingNoteTitle]);
+  const navigation = useNavigation();
 
   const getBorderColor = (color) => {
     if (isDarkTheme && (color === "#e5e3e3" || color === "#f5f5f5")) {
@@ -126,91 +85,16 @@ export default function Notes({
     }
   };
 
-  const isDarkBackground = (color) => {
-    const darkColors = ["#000033", "#301934", "#9C27B0"];
-    return darkColors.includes(color);
-  };
-
-  const saveCurrentEdit = () => {
-    if (editingNote !== null) {
-      const date = new Date();
-      let hours = date.getHours();
-      const minutes = date.getMinutes().toString().padStart(2, "0");
-      const ampm = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12 || 12;
-      const time = `${hours.toString().padStart(2, "0")}:${minutes} ${ampm}`;
-      const day = date.getDate().toString().padStart(2, "0");
-      const month = (date.getMonth() + 1).toString().padStart(2, "0");
-      const year = date.getFullYear();
-      const dateStr = `${day}-${month}-${year}`;
-
-      updateNote(editingNote.id, {
-        title: editingNoteTitle,
-        sentence: editingNoteText,
-        time: time,
-        date: dateStr,
-        font: editingNote.font,
-      });
-    }
-  };
-
-  const closeEditorAndSave = () => {
-    const hasChanges =
-      editingNoteTitle !== editingNote?.title ||
-      editingNoteText !== editingNote?.sentence;
-
-    if (hasChanges) {
-      saveCurrentEdit();
-    }
-    setEditingNote(null);
-    setEditingNoteText("");
-    setEditingNoteTitle("");
-  };
-
   const openPostEditor = (note) => {
-    setEditingNote(note);
-    setEditingNoteText(note.sentence);
-    setEditingNoteTitle(note.title || "Untitled");
-  };
-
-  const deletePostFromEditor = () => {
-    Alert.alert("Delete Note", "Are you sure you want to delete this note?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        onPress: () => {
-          deleteNote(editingNote.id);
-          setEditingNote(null);
-          setEditingNoteText("");
-          setEditingNoteTitle("");
-        },
-        style: "destructive",
-      },
-    ]);
-  };
-
-  const togglePinInEditor = () => {
-    if (editingNote) {
-      toggleNotePin(editingNote.id);
-      setEditingNote({
-        ...editingNote,
-        pinned: !editingNote.pinned,
-      });
-    }
-  };
-
-  const changeColorInEditor = () => {
-    if (!editingNote) return;
-    changeNoteColor(editingNote.id);
-
-    const currentIndex =
-      editingNote.colorIndex !== undefined ? editingNote.colorIndex : 0;
-    const nextIndex = (currentIndex + 1) % COLOR_ARRAY.length;
-    setEditingNote({
-      ...editingNote,
-      colorIndex: nextIndex,
-      color: COLOR_ARRAY[nextIndex].bg,
-      textcolor: COLOR_ARRAY[nextIndex].text,
+    navigation.navigate("NoteEditor", {
+      noteId: note.id,
+      note: note,
+      updateNote: updateNote,
+      deleteNote: deleteNote,
+      changeNoteColor: changeNoteColor,
+      toggleNotePin: toggleNotePin,
+      archiveNote: archiveNote,
+      updateFontSize: updateFontSize,
     });
   };
 
@@ -452,223 +336,296 @@ export default function Notes({
         )}
         <View style={{ height: Platform.OS === "ios" ? 120 : 80 }} />
       </ScrollView>
+    </SafeAreaView>
+  );
+}
 
-      {editingNote !== null && (
-        <View
-          style={[
-            styles.fullScreenEditor,
-            {
-              backgroundColor:
-                editingNote.color || (isDarkTheme ? "#1a1a1a" : "whitesmoke"),
-            },
-          ]}
-        >
-          <StatusBar
-            barStyle={
-              editingNote.textcolor === "white" ||
-              editingNote.color === "#1A237E" ||
-              editingNote.color === "#1B5E20" ||
-              editingNote.color === "#0D47A1" ||
-              editingNote.color === "#4A148C" ||
-              editingNote.color === "#311B92" ||
-              editingNote.color === "#B71C1C" ||
-              editingNote.color === "#3E2723" ||
-              editingNote.color === "#263238" ||
-              editingNote.color === "#000000"
-                ? "light-content"
-                : "dark-content"
-            }
-            backgroundColor={editingNote.color}
-            translucent={false}
+// Note Editor Screen Component
+export function NoteEditorScreen({ route, navigation }) {
+  const {
+    note,
+    updateNote,
+    deleteNote,
+    changeNoteColor,
+    toggleNotePin,
+    archiveNote,
+    updateFontSize,
+  } = route.params;
+  const scrollViewRef = useRef(null);
+  const textInputRef = useRef(null);
+
+  const [editingNoteText, setEditingNoteText] = useState(note.sentence);
+  const [editingNoteTitle, setEditingNoteTitle] = useState(
+    note.title || "Untitled",
+  );
+  const [currentNote, setCurrentNote] = useState(note);
+
+  const saveCurrentEdit = () => {
+    const date = new Date();
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    const time = `${hours.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+    const dateStr = `${day}-${month}-${year}`;
+
+    updateNote(currentNote.id, {
+      title: editingNoteTitle,
+      sentence: editingNoteText,
+      time: time,
+      date: dateStr,
+      font: currentNote.font,
+    });
+  };
+
+  const handleBack = () => {
+    const hasChanges =
+      editingNoteTitle !== currentNote.title ||
+      editingNoteText !== currentNote.sentence;
+    if (hasChanges) {
+      saveCurrentEdit();
+    }
+    navigation.goBack();
+  };
+
+  const deletePostFromEditor = () => {
+    Alert.alert("Delete Note", "Are you sure you want to delete this note?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        onPress: () => {
+          deleteNote(currentNote.id);
+          navigation.goBack();
+        },
+        style: "destructive",
+      },
+    ]);
+  };
+
+  const togglePinInEditor = () => {
+    toggleNotePin(currentNote.id);
+    setCurrentNote({
+      ...currentNote,
+      pinned: !currentNote.pinned,
+    });
+  };
+
+  const changeColorInEditor = () => {
+    changeNoteColor(currentNote.id);
+    const currentIndex =
+      currentNote.colorIndex !== undefined ? currentNote.colorIndex : 0;
+    const nextIndex = (currentIndex + 1) % COLOR_ARRAY.length;
+    setCurrentNote({
+      ...currentNote,
+      colorIndex: nextIndex,
+      color: COLOR_ARRAY[nextIndex].bg,
+      textcolor: COLOR_ARRAY[nextIndex].text,
+    });
+  };
+
+  const isDarkBackground = (color) => {
+    const darkColors = ["#000033", "#301934", "#9C27B0"];
+    return darkColors.includes(color);
+  };
+
+  return (
+    <SafeAreaView
+      style={[styles.editorContainer, { backgroundColor: currentNote.color }]}
+    >
+      <StatusBar
+        barStyle={
+          currentNote.textcolor === "white" ||
+          currentNote.color === "#1A237E" ||
+          currentNote.color === "#1B5E20" ||
+          currentNote.color === "#0D47A1" ||
+          currentNote.color === "#4A148C" ||
+          currentNote.color === "#311B92" ||
+          currentNote.color === "#B71C1C" ||
+          currentNote.color === "#3E2723" ||
+          currentNote.color === "#263238" ||
+          currentNote.color === "#000000"
+            ? "light-content"
+            : "dark-content"
+        }
+        backgroundColor={currentNote.color}
+        translucent={false}
+      />
+
+      <View style={styles.editorHeader}>
+        <TouchableOpacity onPress={handleBack} style={styles.editorBackButton}>
+          <Feather
+            name="arrow-left"
+            size={24}
+            color={currentNote.textcolor || "#fff"}
           />
+        </TouchableOpacity>
 
-          <View style={styles.editorHeader}>
+        <View style={styles.editorHeaderRight}>
+          <View style={styles.zoomBtnsArea}>
             <TouchableOpacity
-              onPress={closeEditorAndSave}
-              style={styles.editorBackButton}
+              style={styles.editorHeaderButton}
+              onPress={() => {
+                const newSize = Math.min((currentNote.font || 19) + 1, 25);
+                updateFontSize(currentNote.id, "increase");
+                setCurrentNote({
+                  ...currentNote,
+                  font: newSize,
+                });
+              }}
             >
               <Feather
-                name="arrow-left"
-                size={24}
-                color={editingNote.textcolor || getTextColor()}
+                name="plus"
+                size={18}
+                color={currentNote.color === "#e5e3e3" ? "#333" : "white"}
               />
             </TouchableOpacity>
-
-            <View style={styles.editorHeaderRight}>
-              <TouchableOpacity>
-                <Feather
-                  name="bell"
-                  size={18}
-                  color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-              <View style={styles.zoomBtnsArea}>
-                <TouchableOpacity
-                  style={styles.editorHeaderButton}
-                  onPress={() => {
-                    const newSize = Math.min((editingNote.font || 19) + 1, 25);
-                    updateFontSize(editingNote.id, "increase");
-                    // Also update local editingNote state for immediate visual feedback
-                    setEditingNote({
-                      ...editingNote,
-                      font: newSize,
-                    });
-                  }}
-                >
-                  <Feather
-                    name="plus"
-                    size={18}
-                    color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.editorHeaderButton}
-                  onPress={() => {
-                    const newSize = Math.max((editingNote.font || 19) - 1, 12);
-                    updateFontSize(editingNote.id, "decrease");
-                    // Also update local editingNote state for immediate visual feedback
-                    setEditingNote({
-                      ...editingNote,
-                      font: newSize,
-                    });
-                  }}
-                >
-                  <Feather
-                    name="minus"
-                    size={18}
-                    color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.editorHeaderButton}
-                onPress={() => {
-                  archiveNote(editingNote.id);
-                  closeEditorAndSave();
-                }}
-              >
-                <Feather
-                  name="archive"
-                  size={18}
-                  color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.editorHeaderButton}
-                onPress={changeColorInEditor}
-              >
-                <Feather
-                  name="sliders"
-                  size={18}
-                  color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.editorHeaderButton}
-                onPress={togglePinInEditor}
-              >
-                <FontAwesome
-                  name="thumb-tack"
-                  size={18}
-                  color={
-                    editingNote?.pinned
-                      ? "gray"
-                      : editingNote?.color === "#e5e3e3" ||
-                          editingNote?.textcolor === "gray"
-                        ? "#333"
-                        : "white"
-                  }
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.editorHeaderButton}
-                onPress={deletePostFromEditor}
-              >
-                <Feather
-                  name="trash-2"
-                  size={18}
-                  color={editingNote?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.editorHeaderButton}
+              onPress={() => {
+                const newSize = Math.max((currentNote.font || 19) - 1, 12);
+                updateFontSize(currentNote.id, "decrease");
+                setCurrentNote({
+                  ...currentNote,
+                  font: newSize,
+                });
+              }}
+            >
+              <Feather
+                name="minus"
+                size={18}
+                color={currentNote.color === "#e5e3e3" ? "#333" : "white"}
+              />
+            </TouchableOpacity>
           </View>
 
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.editorScrollView}
-              contentContainerStyle={styles.editorScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              keyboardDismissMode="interactive"
-              bounces={true}
-            >
-              <View style={styles.editorPostInfo}>
-                <TextInput
-                  style={[
-                    styles.editorTitleInput,
-                    {
-                      color: editingNote.textcolor || "#666",
-                      borderBottomColor: editingNote.textcolor || "#666",
-                    },
-                  ]}
-                  value={editingNoteTitle}
-                  onChangeText={setEditingNoteTitle}
-                  placeholder="Enter title..."
-                  placeholderTextColor={
-                    editingNote.textcolor === "white"
-                      ? "rgba(255,255,255,0.5)"
-                      : "rgba(0,0,0,0.4)"
-                  }
-                />
-                <Text
-                  style={[
-                    styles.editorPostDate,
-                    {
-                      color: editingNote.textcolor || "#666",
-                    },
-                  ]}
-                >
-                  Last updated: {editingNote.date} {editingNote.time}
-                </Text>
-              </View>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={() => {
+              archiveNote(currentNote.id);
+              navigation.goBack();
+            }}
+          >
+            <Feather
+              name="archive"
+              size={18}
+              color={currentNote.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
 
-              <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-              >
-                <TextInput
-                  ref={textInputRef}
-                  style={[
-                    styles.editorTextArea,
-                    {
-                      color: editingNote.textcolor || "#333",
-                      backgroundColor: "transparent",
-                      fontSize: editingNote.font,
-                    },
-                  ]}
-                  value={editingNoteText}
-                  onChangeText={setEditingNoteText}
-                  multiline={true}
-                  textAlignVertical="top"
-                  placeholder="Write your note here..."
-                  placeholderTextColor={
-                    isDarkBackground(editingNote.color) ? "#000033" : "white"
-                  }
-                />
-              </KeyboardAvoidingView>
-              {/* <View style={{ height: 350 }} /> */}
-            </ScrollView>
-          </TouchableWithoutFeedback>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={changeColorInEditor}
+          >
+            <Feather
+              name="sliders"
+              size={18}
+              color={currentNote.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
 
-          <View style={styles.editorBottomActions} />
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={togglePinInEditor}
+          >
+            <FontAwesome
+              name="thumb-tack"
+              size={18}
+              color={
+                currentNote?.pinned
+                  ? "gray"
+                  : currentNote?.color === "#e5e3e3" ||
+                      currentNote?.textcolor === "gray"
+                    ? "#333"
+                    : "white"
+              }
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={deletePostFromEditor}
+          >
+            <Feather
+              name="trash-2"
+              size={18}
+              color={currentNote.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
         </View>
-      )}
+      </View>
+
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.editorScrollView}
+          contentContainerStyle={styles.editorScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          bounces={true}
+        >
+          <View style={styles.editorPostInfo}>
+            <TextInput
+              style={[
+                styles.editorTitleInput,
+                {
+                  color: currentNote.textcolor || "#666",
+                  borderBottomColor: currentNote.textcolor || "#666",
+                },
+              ]}
+              value={editingNoteTitle}
+              onChangeText={setEditingNoteTitle}
+              placeholder="Enter title..."
+              placeholderTextColor={
+                currentNote.textcolor === "white"
+                  ? "rgba(255,255,255,0.5)"
+                  : "rgba(0,0,0,0.4)"
+              }
+            />
+            <Text
+              style={[
+                styles.editorPostDate,
+                {
+                  color: currentNote.textcolor || "#666",
+                },
+              ]}
+            >
+              Last updated: {currentNote.date} {currentNote.time}
+            </Text>
+          </View>
+
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+          >
+            <TextInput
+              ref={textInputRef}
+              style={[
+                styles.editorTextArea,
+                {
+                  color: currentNote.textcolor || "#333",
+                  backgroundColor: "transparent",
+                  fontSize: currentNote.font || 19,
+                },
+              ]}
+              value={editingNoteText}
+              onChangeText={setEditingNoteText}
+              multiline={true}
+              textAlignVertical="top"
+              placeholder="Write your note here..."
+              placeholderTextColor={
+                isDarkBackground(currentNote.color) ? "#000033" : "white"
+              }
+            />
+          </KeyboardAvoidingView>
+        </ScrollView>
+      </TouchableWithoutFeedback>
+
+      <View style={styles.editorBottomActions} />
     </SafeAreaView>
   );
 }
@@ -677,6 +634,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  editorContainer: {
+    flex: 1,
   },
   header: {
     flexDirection: "row",
@@ -787,14 +747,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "sans-serif",
   },
-  fullScreenEditor: {
-    position: "absolute",
-    top: -50,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
-  },
   zoomBtnsArea: {
     display: "flex",
     flexDirection: "row",
@@ -821,7 +773,6 @@ const styles = StyleSheet.create({
   },
   editorHeaderButton: {
     padding: 8,
-    //   marginRight: 8,
   },
   editorScrollView: {
     flex: 1,

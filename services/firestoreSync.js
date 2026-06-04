@@ -82,11 +82,11 @@ class FirestoreSyncService {
 
       // Delete notes that no longer exist locally
       let deletedCount = 0;
-      for (const noteId of existingNoteIds) {
-        const noteRef = doc(db, `${collectionPath}/${noteId}`);
-        batch.delete(noteRef);
-        deletedCount++;
-      }
+      // for (const noteId of existingNoteIds) {
+      //   const noteRef = doc(db, `${collectionPath}/${noteId}`);
+      //   batch.delete(noteRef);
+      //   deletedCount++;
+      // }
       if (deletedCount > 0) {
         console.log(`   Deleted ${deletedCount} notes from Firestore`);
       }
@@ -172,10 +172,10 @@ class FirestoreSyncService {
         existingListIds.delete(list.id.toString());
       }
 
-      for (const listId of existingListIds) {
-        const listRef = doc(db, `${collectionPath}/${listId}`);
-        batch.delete(listRef);
-      }
+      // for (const listId of existingListIds) {
+      //   const listRef = doc(db, `${collectionPath}/${listId}`);
+      //   batch.delete(listRef);
+      // }
 
       await batch.commit();
       console.log("✅ syncLists completed");
@@ -244,10 +244,10 @@ class FirestoreSyncService {
         existingEventIds.delete(event.id.toString());
       }
 
-      for (const eventId of existingEventIds) {
-        const eventRef = doc(db, `${collectionPath}/${eventId}`);
-        batch.delete(eventRef);
-      }
+      // for (const eventId of existingEventIds) {
+      //   const eventRef = doc(db, `${collectionPath}/${eventId}`);
+      //   batch.delete(eventRef);
+      // }
 
       await batch.commit();
       return true;
@@ -309,10 +309,10 @@ class FirestoreSyncService {
         existingMoodIds.delete(mood.id.toString());
       }
 
-      for (const moodId of existingMoodIds) {
-        const moodRef = doc(db, `${collectionPath}/${moodId}`);
-        batch.delete(moodRef);
-      }
+      // for (const moodId of existingMoodIds) {
+      //   const moodRef = doc(db, `${collectionPath}/${moodId}`);
+      //   batch.delete(moodRef);
+      // }
 
       await batch.commit();
       return true;
@@ -419,10 +419,10 @@ class FirestoreSyncService {
         existingMindmapIds.delete(mindmap.id.toString());
       }
 
-      for (const mindmapId of existingMindmapIds) {
-        const mindmapRef = doc(db, `${collectionPath}/${mindmapId}`);
-        batch.delete(mindmapRef);
-      }
+      // for (const mindmapId of existingMindmapIds) {
+      //   const mindmapRef = doc(db, `${collectionPath}/${mindmapId}`);
+      //   batch.delete(mindmapRef);
+      // }
 
       await batch.commit();
       console.log("✅ syncMindmaps completed");

@@ -13,8 +13,8 @@ import {
   ScrollView,
   Platform,
   Dimensions,
-  BackHandler,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import Feather from "@expo/vector-icons/Feather";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -41,14 +41,6 @@ export default function List({
   setListsSearchTerm,
   listsShowSearch,
   setListsShowSearch,
-  editingList,
-  setEditingList,
-  editingListTitle,
-  setEditingListTitle,
-  newTaskText,
-  setNewTaskText,
-  editingTasks,
-  setEditingTasks,
   onEditingPostColorChange,
   onCloseSidebar,
   isDarkTheme = false,
@@ -62,54 +54,7 @@ export default function List({
   deleteTask,
   archiveList,
 }) {
-  const scrollViewRef = useRef(null);
-  const textInputRef = useRef(null);
-
-  useEffect(() => {
-    if (onEditingPostColorChange) {
-      onEditingPostColorChange(editingList?.color || null);
-    }
-  }, [editingList, onEditingPostColorChange]);
-
-  useEffect(() => {
-    if (editingList !== null) {
-      // Find the latest version of this list from parent
-      const currentList = lists.find((list) => list.id === editingList.id);
-
-      if (currentList) {
-        // Only sync tasks from parent updates
-        setEditingTasks(currentList.tasks || []);
-      }
-    }
-  }, [lists, editingList?.id]);
-
-  useEffect(() => {
-    const backAction = () => {
-      if (editingList !== null) {
-        // Check if tasks or title changed
-        const hasTaskChanges =
-          JSON.stringify(editingTasks) !== JSON.stringify(editingList.tasks);
-        const hasTitleChanges = editingListTitle !== editingList.title;
-
-        if (hasTaskChanges || hasTitleChanges) {
-          saveCurrentEdit();
-        }
-        setEditingList(null);
-        setEditingListTitle("");
-        setEditingTasks([]);
-        setNewTaskText("");
-        return true;
-      }
-      return false;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction,
-    );
-
-    return () => backHandler.remove();
-  }, [editingList, editingListTitle, editingTasks]);
+  const navigation = useNavigation();
 
   const getBorderColor = (color) => {
     if (isDarkTheme && (color === "#e5e3e3" || color === "#f5f5f5")) {
@@ -130,99 +75,24 @@ export default function List({
     return colorMap[color] || "#424242";
   };
 
-  const saveCurrentEdit = () => {
-    if (editingList !== null) {
-      const date = new Date();
-      let hours = date.getHours();
-      const minutes = date.getMinutes().toString().padStart(2, "0");
-      const ampm = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12 || 12;
-      const time = `${hours.toString().padStart(2, "0")}:${minutes} ${ampm}`;
-      const day = date.getDate().toString().padStart(2, "0");
-      const month = (date.getMonth() + 1).toString().padStart(2, "0");
-      const year = date.getFullYear();
-      const dateStr = `${day}-${month}-${year}`;
-
-      // Use editingTasks directly instead of from state
-      updateList(editingList.id, {
-        title: editingListTitle === "" ? "Untitled List" : editingListTitle,
-        tasks: editingTasks,
-        time: time,
-        date: dateStr,
-      });
-    }
-  };
-
-  const closeEditorAndSave = () => {
-    // Only save if content actually changed
-    const hasTaskChanges =
-      JSON.stringify(editingTasks) !== JSON.stringify(editingList?.tasks || []);
-    const hasTitleChanges = editingListTitle !== editingList?.title;
-
-    if (hasTaskChanges || hasTitleChanges) {
-      saveCurrentEdit();
-    }
-    setEditingList(null);
-    setEditingListTitle("");
-    setEditingTasks([]);
-    setNewTaskText("");
-  };
-
   const openListEditor = (list) => {
-    setEditingList(list);
-    setEditingListTitle(list.title || "");
-    setEditingTasks([...list.tasks]);
-  };
-
-  const deleteListFromEditor = () => {
-    Alert.alert("Delete List", "Are you sure you want to delete this list?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        onPress: () => {
-          deleteList(editingList.id);
-          setEditingList(null);
-          setEditingListTitle("");
-          setEditingTasks([]);
-          setNewTaskText("");
-        },
-        style: "destructive",
-      },
-    ]);
-  };
-
-  const changeColorInEditor = () => {
-    if (!editingList) return;
-    changeListColor(editingList.id);
-
-    const currentIndex =
-      editingList.colorIndex !== undefined ? editingList.colorIndex : 0;
-    const nextIndex = (currentIndex + 1) % COLOR_ARRAY.length;
-    setEditingList({
-      ...editingList,
-      colorIndex: nextIndex,
-      color: COLOR_ARRAY[nextIndex].bg,
-      textcolor: COLOR_ARRAY[nextIndex].text,
+    navigation.navigate("ListEditor", {
+      listId: list.id,
+      list: list,
+      updateList: updateList,
+      deleteList: deleteList,
+      changeListColor: changeListColor,
+      toggleListPin: toggleListPin,
+      addTaskToList: addTaskToList,
+      toggleTaskCompletion: toggleTaskCompletion,
+      deleteTask: deleteTask,
+      archiveList: archiveList,
     });
   };
 
   const clearSearch = () => {
     setListsSearchTerm("");
     setListsShowSearch(false);
-  };
-
-  const addTask = () => {
-    if (newTaskText.trim() === "") return;
-    addTaskToList(editingList.id, newTaskText);
-    setNewTaskText("");
-  };
-
-  const handleToggleTaskCompletion = (taskId) => {
-    toggleTaskCompletion(editingList.id, taskId);
-  };
-
-  const handleDeleteTask = (taskId) => {
-    deleteTask(editingList.id, taskId);
   };
 
   const filteredLists =
@@ -259,57 +129,6 @@ export default function List({
     const completedCount = tasks.filter((t) => t.completed).length;
     return `${completedCount}/${tasks.length} tasks completed`;
   };
-
-  const renderTaskItem = ({ item }) => (
-    <View style={styles.taskItem}>
-      <TouchableOpacity
-        onPress={() => handleToggleTaskCompletion(item.id)}
-        style={styles.checkboxContainer}
-      >
-        <View
-          style={[
-            styles.checkbox,
-            {
-              borderColor:
-                editingList?.textcolor === "#FFFFFF" ? "#fff" : "#666",
-            },
-            item.completed && styles.checkboxChecked,
-          ]}
-        >
-          {item.completed && (
-            <Feather
-              name="check"
-              size={12}
-              color={editingList?.color === "#e5e3e3" ? "#202124" : "#fff"}
-            />
-          )}
-        </View>
-      </TouchableOpacity>
-      <Text
-        style={[
-          styles.taskText,
-          item.completed && styles.completedTaskText,
-          { color: editingList?.textcolor || "#333" },
-        ]}
-      >
-        {item.text}
-      </Text>
-      <TouchableOpacity
-        onPress={() => handleDeleteTask(item.id)}
-        style={styles.deleteTaskButton}
-      >
-        <Feather
-          name="trash-2"
-          size={16}
-          color={
-            editingList?.textcolor === "#FFFFFF"
-              ? "rgba(255,255,255,0.6)"
-              : "#999"
-          }
-        />
-      </TouchableOpacity>
-    </View>
-  );
 
   const renderGridSection = (gridData, sectionTitle, showTitle = true) => {
     if (gridData.length === 0) return null;
@@ -654,193 +473,362 @@ export default function List({
         )}
         <View style={{ height: Platform.OS === "ios" ? 120 : 80 }} />
       </ScrollView>
+    </SafeAreaView>
+  );
+}
 
-      {editingList !== null && (
+// List Editor Screen Component
+export function ListEditorScreen({ route, navigation }) {
+  const {
+    list,
+    updateList,
+    deleteList,
+    changeListColor,
+    toggleListPin,
+    addTaskToList,
+    toggleTaskCompletion,
+    deleteTask,
+    archiveList,
+  } = route.params;
+
+  const scrollViewRef = useRef(null);
+  const textInputRef = useRef(null);
+
+  const [editingListTitle, setEditingListTitle] = useState(list.title || "");
+  const [editingTasks, setEditingTasks] = useState([...list.tasks]);
+  const [currentList, setCurrentList] = useState(list);
+  const [newTaskText, setNewTaskText] = useState("");
+
+  const saveCurrentEdit = () => {
+    const date = new Date();
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    const time = `${hours.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const year = date.getFullYear();
+    const dateStr = `${day}-${month}-${year}`;
+
+    updateList(currentList.id, {
+      title: editingListTitle === "" ? "Untitled List" : editingListTitle,
+      tasks: editingTasks,
+      time: time,
+      date: dateStr,
+    });
+  };
+
+  const handleBack = () => {
+    const hasTaskChanges =
+      JSON.stringify(editingTasks) !== JSON.stringify(currentList.tasks);
+    const hasTitleChanges = editingListTitle !== currentList.title;
+
+    if (hasTaskChanges || hasTitleChanges) {
+      saveCurrentEdit();
+    }
+    navigation.goBack();
+  };
+
+  const addTask = () => {
+    if (newTaskText.trim() === "") return;
+    const newTask = {
+      id: Date.now(),
+      text: newTaskText.trim(),
+      completed: false,
+    };
+    setEditingTasks([...editingTasks, newTask]);
+    addTaskToList(currentList.id, newTaskText);
+    setNewTaskText("");
+  };
+
+  const handleToggleTaskCompletion = (taskId) => {
+    setEditingTasks(
+      editingTasks.map((task) =>
+        task.id === taskId ? { ...task, completed: !task.completed } : task,
+      ),
+    );
+    toggleTaskCompletion(currentList.id, taskId);
+  };
+
+  const handleDeleteTask = (taskId) => {
+    setEditingTasks(editingTasks.filter((task) => task.id !== taskId));
+    deleteTask(currentList.id, taskId);
+  };
+
+  const deleteListFromEditor = () => {
+    Alert.alert("Delete List", "Are you sure you want to delete this list?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        onPress: () => {
+          deleteList(currentList.id);
+          navigation.goBack();
+        },
+        style: "destructive",
+      },
+    ]);
+  };
+
+  const togglePinInEditor = () => {
+    toggleListPin(currentList.id);
+    setCurrentList({
+      ...currentList,
+      pinned: !currentList.pinned,
+    });
+  };
+
+  const changeColorInEditor = () => {
+    changeListColor(currentList.id);
+    const currentIndex =
+      currentList.colorIndex !== undefined ? currentList.colorIndex : 0;
+    const nextIndex = (currentIndex + 1) % COLOR_ARRAY.length;
+    setCurrentList({
+      ...currentList,
+      colorIndex: nextIndex,
+      color: COLOR_ARRAY[nextIndex].bg,
+      textcolor: COLOR_ARRAY[nextIndex].text,
+    });
+  };
+
+  const renderTaskItem = ({ item }) => (
+    <View style={styles.taskItem}>
+      <TouchableOpacity
+        onPress={() => handleToggleTaskCompletion(item.id)}
+        style={styles.checkboxContainer}
+      >
         <View
           style={[
-            styles.fullScreenEditor,
+            styles.checkbox,
             {
-              backgroundColor:
-                editingList.color || (isDarkTheme ? "#1a1a1a" : "whitesmoke"),
+              borderColor:
+                currentList?.textcolor === "#FFFFFF" ? "#fff" : "#666",
             },
+            item.completed && styles.checkboxChecked,
           ]}
         >
-          <StatusBar
-            barStyle={
-              editingList.textcolor === "#E8EAF6" ||
-              editingList.textcolor === "#FFFFFF" ||
-              editingList.color === "#1A237E" ||
-              editingList.color === "#1B5E20" ||
-              editingList.color === "#0D47A1" ||
-              editingList.color === "#4A148C" ||
-              editingList.color === "#311B92" ||
-              editingList.color === "#B71C1C" ||
-              editingList.color === "#3E2723" ||
-              editingList.color === "#263238" ||
-              editingList.color === "#000000"
-                ? "light-content"
-                : "dark-content"
-            }
-            backgroundColor={editingList.color}
-            translucent={false}
+          {item.completed && (
+            <Feather
+              name="check"
+              size={12}
+              color={currentList?.color === "#e5e3e3" ? "#202124" : "#fff"}
+            />
+          )}
+        </View>
+      </TouchableOpacity>
+      <Text
+        style={[
+          styles.taskText,
+          item.completed && styles.completedTaskText,
+          { color: currentList?.textcolor || "#333" },
+        ]}
+      >
+        {item.text}
+      </Text>
+      <TouchableOpacity
+        onPress={() => handleDeleteTask(item.id)}
+        style={styles.deleteTaskButton}
+      >
+        <Feather
+          name="trash-2"
+          size={16}
+          color={
+            currentList?.textcolor === "#FFFFFF"
+              ? "rgba(255,255,255,0.6)"
+              : "#999"
+          }
+        />
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.editorContainer, { backgroundColor: currentList.color }]}
+    >
+      <StatusBar
+        barStyle={
+          currentList.textcolor === "#E8EAF6" ||
+          currentList.textcolor === "#FFFFFF" ||
+          currentList.color === "#1A237E" ||
+          currentList.color === "#1B5E20" ||
+          currentList.color === "#0D47A1" ||
+          currentList.color === "#4A148C" ||
+          currentList.color === "#311B92" ||
+          currentList.color === "#B71C1C" ||
+          currentList.color === "#3E2723" ||
+          currentList.color === "#263238" ||
+          currentList.color === "#000000"
+            ? "light-content"
+            : "dark-content"
+        }
+        backgroundColor={currentList.color}
+        translucent={false}
+      />
+
+      <View style={styles.editorHeader}>
+        <TouchableOpacity onPress={handleBack} style={styles.editorBackButton}>
+          <Feather
+            name="arrow-left"
+            size={24}
+            color={currentList.textcolor || "#fff"}
           />
+        </TouchableOpacity>
 
-          <View style={styles.editorHeader}>
-            <TouchableOpacity
-              onPress={closeEditorAndSave}
-              style={styles.editorBackButton}
-            >
-              <Feather
-                name="arrow-left"
-                size={24}
-                color={editingList.textcolor || getTextColor()}
-              />
-            </TouchableOpacity>
-
-            <View style={styles.editorHeaderRight}>
-              <TouchableOpacity
-                style={[styles.editorHeaderButton]}
-                onPress={() => {
-                  archiveList(editingList.id);
-                  closeEditorAndSave();
-                }}
-              >
-                <Feather
-                  name="archive"
-                  size={20}
-                  color={editingList?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editorHeaderButton]}
-                onPress={changeColorInEditor}
-              >
-                <Feather
-                  name="sliders"
-                  size={20}
-                  color={editingList?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editorHeaderButton]}
-                onPress={deleteListFromEditor}
-              >
-                <Feather
-                  name="trash-2"
-                  size={20}
-                  color={editingList?.color === "#e5e3e3" ? "#333" : "white"}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.editorScrollView}
-            contentContainerStyle={styles.editorScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="interactive"
-            bounces={true}
+        <View style={styles.editorHeaderRight}>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={() => {
+              archiveList(currentList.id);
+              navigation.goBack();
+            }}
           >
-            <View style={styles.editorPostInfo}>
-              <TextInput
-                style={[
-                  styles.editorTitleInput,
-                  {
-                    color: editingList.textcolor || "#666",
-                    borderBottomColor: editingList.textcolor || "#666",
-                  },
-                ]}
-                value={editingListTitle ?? ""}
-                onChangeText={setEditingListTitle}
-                placeholder="Enter list title..."
-                placeholderTextColor={
-                  editingList?.color === "#e5e3e3" ||
-                  editingList?.color === "whitesmoke" ||
-                  editingList?.color === "#f5f5f5"
-                    ? "#000033"
-                    : "#f5f5f5"
-                }
-              />
-              <Text
-                style={[
-                  styles.editorPostDate,
-                  {
-                    color: editingList.textcolor || "#666",
-                  },
-                ]}
-              >
-                Last updated: {editingList.date} {editingList.time}
-              </Text>
-            </View>
-
-            <FlatList
-              data={editingTasks}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={renderTaskItem}
-              scrollEnabled={false}
-              ListEmptyComponent={
-                <Text
-                  style={[
-                    styles.emptyTasksText,
-                    {
-                      color:
-                        editingList.color === "#e5e3e3" ? "#000033" : "white",
-                    },
-                  ]}
-                >
-                  No tasks yet. Add one below!
-                </Text>
+            <Feather
+              name="archive"
+              size={20}
+              color={currentList?.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={changeColorInEditor}
+          >
+            <Feather
+              name="sliders"
+              size={20}
+              color={currentList?.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={togglePinInEditor}
+          >
+            <Feather
+              name="map-pin"
+              size={20}
+              color={
+                currentList?.pinned
+                  ? "#FFD700"
+                  : currentList?.color === "#e5e3e3"
+                    ? "#333"
+                    : "white"
               }
             />
-
-            <View style={styles.addTaskContainer}>
-              <TextInput
-                ref={textInputRef}
-                style={[
-                  styles.addTaskInput,
-                  {
-                    color: editingList.textcolor || "#333",
-                    borderBottomColor:
-                      editingList.textcolor === "#FFFFFF"
-                        ? "rgba(255,255,255,0.3)"
-                        : "rgba(0,0,0,0.2)",
-                  },
-                ]}
-                value={newTaskText}
-                onChangeText={setNewTaskText}
-                placeholder="Add a new task..."
-                placeholderTextColor={
-                  editingList?.color === "#e5e3e3" ||
-                  editingList?.color === "whitesmoke" ||
-                  editingList?.color === "#f5f5f5"
-                    ? "#000033"
-                    : "#FFFFFF"
-                }
-                onSubmitEditing={addTask}
-                returnKeyType="done"
-              />
-              <TouchableOpacity
-                style={styles.addTaskButton}
-                onPress={addTask}
-                activeOpacity={0.7}
-              >
-                <Feather
-                  name="plus"
-                  size={20}
-                  color={editingList.textcolor || "#333"}
-                />
-              </TouchableOpacity>
-              <View style={{ height: 260 }}></View>
-            </View>
-
-            <View style={{ height: 150 }} />
-          </ScrollView>
-
-          <View style={styles.editorBottomActions} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.editorHeaderButton}
+            onPress={deleteListFromEditor}
+          >
+            <Feather
+              name="trash-2"
+              size={20}
+              color={currentList?.color === "#e5e3e3" ? "#333" : "white"}
+            />
+          </TouchableOpacity>
         </View>
-      )}
+      </View>
+
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.editorScrollView}
+        contentContainerStyle={styles.editorScrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
+        bounces={true}
+      >
+        <View style={styles.editorPostInfo}>
+          <TextInput
+            style={[
+              styles.editorTitleInput,
+              {
+                color: currentList.textcolor || "#666",
+                borderBottomColor: currentList.textcolor || "#666",
+              },
+            ]}
+            value={editingListTitle ?? ""}
+            onChangeText={setEditingListTitle}
+            placeholder="Enter list title..."
+            placeholderTextColor={
+              currentList?.color === "#e5e3e3" ||
+              currentList?.color === "whitesmoke" ||
+              currentList?.color === "#f5f5f5"
+                ? "#000033"
+                : "#f5f5f5"
+            }
+          />
+          <Text
+            style={[
+              styles.editorPostDate,
+              {
+                color: currentList.textcolor || "#666",
+              },
+            ]}
+          >
+            Last updated: {currentList.date} {currentList.time}
+          </Text>
+        </View>
+
+        <FlatList
+          data={editingTasks}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderTaskItem}
+          scrollEnabled={false}
+          ListEmptyComponent={
+            <Text
+              style={[
+                styles.emptyTasksText,
+                {
+                  color: currentList.color === "#e5e3e3" ? "#000033" : "white",
+                },
+              ]}
+            >
+              No tasks yet. Add one below!
+            </Text>
+          }
+        />
+
+        <View style={styles.addTaskContainer}>
+          <TextInput
+            ref={textInputRef}
+            style={[
+              styles.addTaskInput,
+              {
+                color: currentList.textcolor || "#333",
+                borderBottomColor:
+                  currentList.textcolor === "#FFFFFF"
+                    ? "rgba(255,255,255,0.3)"
+                    : "rgba(0,0,0,0.2)",
+              },
+            ]}
+            value={newTaskText}
+            onChangeText={setNewTaskText}
+            placeholder="Add a new task..."
+            placeholderTextColor={
+              currentList?.color === "#e5e3e3" ||
+              currentList?.color === "whitesmoke" ||
+              currentList?.color === "#f5f5f5"
+                ? "#000033"
+                : "#FFFFFF"
+            }
+            onSubmitEditing={addTask}
+            returnKeyType="done"
+          />
+          <TouchableOpacity
+            style={styles.addTaskButton}
+            onPress={addTask}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="plus"
+              size={20}
+              color={currentList.textcolor || "#333"}
+            />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      <View style={styles.editorBottomActions} />
     </SafeAreaView>
   );
 }
@@ -849,6 +837,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  editorContainer: {
+    flex: 1,
   },
   header: {
     flexDirection: "row",
@@ -994,14 +985,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "sans-serif",
   },
-  fullScreenEditor: {
-    position: "absolute",
-    top: -50,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
-  },
   editorHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1022,7 +1005,6 @@ const styles = StyleSheet.create({
   },
   editorHeaderButton: {
     padding: 8,
-    marginRight: 8,
   },
   editorScrollView: {
     flex: 1,
@@ -1085,7 +1067,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 40,
   },
   addTaskInput: {
     flex: 1,

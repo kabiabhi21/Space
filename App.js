@@ -1,19 +1,24 @@
-// App.js
+// App.js - Add ListEditor import and screen
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   StyleSheet,
   ActivityIndicator,
   SafeAreaView,
+  Platform,
+  Alert,
 } from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Network from "expo-network";
+import * as Notifications from "expo-notifications";
 import { onAuthStateChanged } from "./services/firebase";
 import firestoreSync from "./services/firestoreSync";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
-import Notes from "./components/Notes";
-import List from "./components/List";
+import Notes, { NoteEditorScreen } from "./components/Notes";
+import List, { ListEditorScreen } from "./components/List";
 import Calendar from "./components/Calendar";
 import Mindmap from "./components/Mindmap";
 import Login from "./components/Login";
@@ -21,9 +26,21 @@ import Settings from "./components/Settings";
 import Archive from "./components/Archive";
 import Deleted from "./components/Deleted";
 
-const THEME_STORAGE_KEY = "@app_theme";
+const Stack = createNativeStackNavigator();
 
-export default function App() {
+// Configure notification handler for when app is in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+const THEME_STORAGE_KEY = "@app_theme";
+const REMINDERS_STORAGE_KEY = "@calendar_reminders";
+
+function MainApp() {
   // UI States
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [currentScreen, setCurrentScreen] = useState("Notes");
@@ -39,18 +56,11 @@ export default function App() {
   const [notes, setNotes] = useState([]);
   const [notesSearchTerm, setNotesSearchTerm] = useState("");
   const [notesShowSearch, setNotesShowSearch] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
-  const [editingNoteText, setEditingNoteText] = useState("");
-  const [editingNoteTitle, setEditingNoteTitle] = useState("");
 
   // Lists States
   const [lists, setLists] = useState([]);
   const [listsSearchTerm, setListsSearchTerm] = useState("");
   const [listsShowSearch, setListsShowSearch] = useState(false);
-  const [editingList, setEditingList] = useState(null);
-  const [editingListTitle, setEditingListTitle] = useState("");
-  const [newTaskText, setNewTaskText] = useState("");
-  const [editingTasks, setEditingTasks] = useState([]);
 
   // Calendar States
   const [events, setEvents] = useState([]);
@@ -76,6 +86,11 @@ export default function App() {
   const [mindmapScale, setMindmapScale] = useState(1);
   const [openColorNode, setOpenColorNode] = useState(null);
   const [isMindmapAuthenticated, setIsMindmapAuthenticated] = useState(false);
+
+  // Reminders States
+  const [reminders, setReminders] = useState([]);
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   // updateFontSize function
   const updateFontSize = (id, type) => {
@@ -114,12 +129,212 @@ export default function App() {
     CALENDAR_MOODS: "@calendar_moods",
     CALENDAR_DATE_COLORS: "@calendar_date_colors",
     MINDMAPS: "@mindmaps",
+    REMINDERS: "@calendar_reminders",
   };
 
   // Load theme from AsyncStorage on app start
   useEffect(() => {
     loadTheme();
+    setupNotificationListeners();
+    loadRemindersFromStorage();
+    checkNotificationPermissions();
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(
+          notificationListener.current,
+        );
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
   }, []);
+
+  // Setup notification listeners
+  const setupNotificationListeners = () => {
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("Notification received in foreground:", notification);
+      });
+
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log("Notification clicked:", response);
+        const { data } = response.notification.request.content;
+        if (data && data.year && data.month !== undefined && data.date) {
+          // Navigate to calendar and show the specific date
+          setCurrentScreen("Calendar");
+          setCurrentYear(data.year);
+          setCurrentMonth(data.month);
+          setSelectedDate(data.date);
+          setEventViewerActive(true);
+        }
+      });
+  };
+
+  // Check notification permissions on app start
+  const checkNotificationPermissions = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted" && Platform.OS === "android") {
+      console.log("Notifications permission not granted yet");
+    }
+  };
+
+  // Load saved reminders from storage
+  const loadRemindersFromStorage = async () => {
+    try {
+      const savedReminders = await AsyncStorage.getItem(STORAGE_KEYS.REMINDERS);
+      if (savedReminders) {
+        const parsedReminders = JSON.parse(savedReminders);
+        setReminders(parsedReminders);
+        reScheduleReminders(parsedReminders);
+      }
+    } catch (error) {
+      console.error("Error loading reminders:", error);
+    }
+  };
+
+  // Re-schedule reminders on app start
+  const reScheduleReminders = async (remindersList) => {
+    const now = new Date();
+    for (const reminder of remindersList) {
+      const reminderDate = new Date(reminder.scheduledTime);
+      if (reminderDate > now && reminder.status === "scheduled") {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: reminder.title,
+            body: reminder.body,
+            data: reminder.data,
+          },
+          trigger: {
+            date: reminderDate,
+          },
+        });
+      }
+    }
+  };
+
+  // Save reminder to storage
+  const saveReminderToStorage = async (reminder) => {
+    try {
+      const updatedReminders = [...reminders, reminder];
+      setReminders(updatedReminders);
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.REMINDERS,
+        JSON.stringify(updatedReminders),
+      );
+    } catch (error) {
+      console.error("Error saving reminder:", error);
+    }
+  };
+
+  // Update reminder status
+  const updateReminderStatus = async (reminderId, status) => {
+    try {
+      const updatedReminders = reminders.map((r) =>
+        r.id === reminderId ? { ...r, status } : r,
+      );
+      setReminders(updatedReminders);
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.REMINDERS,
+        JSON.stringify(updatedReminders),
+      );
+    } catch (error) {
+      console.error("Error updating reminder:", error);
+    }
+  };
+
+  // Schedule a new reminder
+  const scheduleReminder = async (reminderData) => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please enable notifications to set reminders",
+        );
+        return false;
+      }
+
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("calendar_reminders", {
+          name: "Calendar Reminders",
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#000033",
+          lockscreenVisibility:
+            Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: true,
+        });
+      }
+
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: reminderData.title,
+          body: reminderData.body,
+          data: reminderData.data,
+        },
+        trigger: {
+          date: reminderData.triggerDate,
+        },
+      });
+
+      const newReminder = {
+        id: notificationId,
+        ...reminderData,
+        status: "scheduled",
+        createdAt: new Date().toISOString(),
+      };
+      await saveReminderToStorage(newReminder);
+
+      return true;
+    } catch (error) {
+      console.error("Error scheduling reminder:", error);
+      Alert.alert("Error", "Failed to set reminder. Please try again.");
+      return false;
+    }
+  };
+
+  // Cancel a reminder
+  const cancelReminder = async (reminderId) => {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(reminderId);
+      await updateReminderStatus(reminderId, "cancelled");
+      return true;
+    } catch (error) {
+      console.error("Error cancelling reminder:", error);
+      return false;
+    }
+  };
+
+  // Cancel all reminders for a specific date
+  const cancelRemindersForDate = async (year, month, date) => {
+    const remindersForDate = reminders.filter(
+      (r) =>
+        r.data &&
+        r.data.year === year &&
+        r.data.month === month &&
+        r.data.date === date &&
+        r.status === "scheduled",
+    );
+
+    for (const reminder of remindersForDate) {
+      await cancelReminder(reminder.id);
+    }
+  };
+
+  // Get reminders for a specific date
+  const getRemindersForDate = (year, month, date) => {
+    return reminders.filter(
+      (r) =>
+        r.data &&
+        r.data.year === year &&
+        r.data.month === month &&
+        r.data.date === date &&
+        r.status === "scheduled",
+    );
+  };
 
   // Listen to auth state changes
   useEffect(() => {
@@ -128,16 +343,13 @@ export default function App() {
       firestoreSync.setCurrentUser(authUser);
 
       if (authUser) {
-        // User logged in - load data from Firestore
         const hasFirestoreData = await loadDataFromFirestore();
 
-        // If no data in Firestore, migrate from AsyncStorage
         if (!hasFirestoreData) {
           await loadFromAsyncStorageBackup();
           await migrateExistingDataToFirestore();
         }
       } else {
-        // User logged out - clear local data
         clearLocalData();
       }
 
@@ -148,7 +360,6 @@ export default function App() {
   }, []);
 
   // Setup network listener
-  // Setup network listener using expo-network
   useEffect(() => {
     let isMounted = true;
     let interval;
@@ -157,7 +368,6 @@ export default function App() {
       try {
         const networkState = await Network.getNetworkStateAsync();
         const wasOnline = isOnline;
-        // Check if connected and has internet access
         const nowOnline =
           networkState.isConnected &&
           networkState.isInternetReachable !== false;
@@ -165,7 +375,6 @@ export default function App() {
         if (isMounted) {
           setIsOnline(nowOnline);
 
-          // If we just came back online, sync pending changes
           if (!wasOnline && nowOnline && user) {
             console.log("Network reconnected, syncing...");
             await syncToFirestore();
@@ -175,15 +384,12 @@ export default function App() {
       } catch (error) {
         console.error("Network check error:", error);
         if (isMounted) {
-          setIsOnline(true); // Assume online if we can't check
+          setIsOnline(true);
         }
       }
     };
 
-    // Check network every 5 seconds
     interval = setInterval(checkNetwork, 5000);
-
-    // Initial check
     checkNetwork();
 
     return () => {
@@ -194,6 +400,7 @@ export default function App() {
 
   // Auto-sync to Firestore when data changes (with debounce)
   useEffect(() => {
+    console.log("AUTO SYNC EFFECT");
     if (user && !isLoading) {
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
@@ -345,6 +552,7 @@ export default function App() {
   };
 
   const syncToFirestore = async () => {
+    console.log("SYNC STARTED", new Date().toISOString());
     if (!user || !isOnline) {
       if (!isOnline && user) {
         await firestoreSync.queueSyncOperation({
@@ -1115,12 +1323,6 @@ export default function App() {
             setNotesSearchTerm={setNotesSearchTerm}
             notesShowSearch={notesShowSearch}
             setNotesShowSearch={setNotesShowSearch}
-            editingNote={editingNote}
-            setEditingNote={setEditingNote}
-            editingNoteText={editingNoteText}
-            setEditingNoteText={setEditingNoteText}
-            editingNoteTitle={editingNoteTitle}
-            setEditingNoteTitle={setEditingNoteTitle}
             onEditingPostColorChange={setEditingPostColor}
             onCloseSidebar={closeSidebar}
             isDarkTheme={isDarkTheme}
@@ -1144,14 +1346,6 @@ export default function App() {
             setListsSearchTerm={setListsSearchTerm}
             listsShowSearch={listsShowSearch}
             setListsShowSearch={setListsShowSearch}
-            editingList={editingList}
-            setEditingList={setEditingList}
-            editingListTitle={editingListTitle}
-            setEditingListTitle={setEditingListTitle}
-            newTaskText={newTaskText}
-            setNewTaskText={setNewTaskText}
-            editingTasks={editingTasks}
-            setEditingTasks={setEditingTasks}
             onEditingPostColorChange={setEditingPostColor}
             onCloseSidebar={closeSidebar}
             isDarkTheme={isDarkTheme}
@@ -1205,6 +1399,9 @@ export default function App() {
             deleteEvent={deleteEvent}
             addMood={addMood}
             updateMood={updateMood}
+            scheduleReminder={scheduleReminder}
+            getRemindersForDate={getRemindersForDate}
+            cancelRemindersForDate={cancelRemindersForDate}
           />
         );
       case "Mindmap":
@@ -1290,12 +1487,6 @@ export default function App() {
             setNotesSearchTerm={setNotesSearchTerm}
             notesShowSearch={notesShowSearch}
             setNotesShowSearch={setNotesShowSearch}
-            editingNote={editingNote}
-            setEditingNote={setEditingNote}
-            editingNoteText={editingNoteText}
-            setEditingNoteText={setEditingNoteText}
-            editingNoteTitle={editingNoteTitle}
-            setEditingNoteTitle={setEditingNoteTitle}
             onEditingPostColorChange={setEditingPostColor}
             onCloseSidebar={closeSidebar}
             isDarkTheme={isDarkTheme}
@@ -1305,6 +1496,7 @@ export default function App() {
             changeNoteColor={changeNoteColor}
             toggleNotePin={toggleNotePin}
             archiveNote={archiveNote}
+            updateFontSize={updateFontSize}
           />
         );
     }
@@ -1364,6 +1556,19 @@ export default function App() {
       )}
       <View style={styles.screenContainer}>{renderScreen()}</View>
     </SafeAreaView>
+  );
+}
+
+// Main App with Navigation Container
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Main" component={MainApp} />
+        <Stack.Screen name="NoteEditor" component={NoteEditorScreen} />
+        <Stack.Screen name="ListEditor" component={ListEditorScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 

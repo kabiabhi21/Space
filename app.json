@@ -1,40 +1,36 @@
 {
   "expo": {
-    "name": "Space",
+    "name": "Cortex",
     "slug": "space-new",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
-
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.iintuitlabs.space"
+      "bundleIdentifier": "com.iintuitlabs.space",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
-
     "android": {
       "softwareKeyboardLayoutMode": "pan",
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
-
       "package": "com.iintuitlabs.space",
       "googleServicesFile": "./google-services.json"
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       [
         "@react-native-google-signin/google-signin",
@@ -42,7 +38,6 @@
           "iosUrlScheme": "com.googleusercontent.apps.640378667893-h982si66dp9v2fmeu6b0dquktg7hsf6a"
         }
       ],
-
       [
         "expo-build-properties",
         {
@@ -54,15 +49,21 @@
           }
         }
       ],
-
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "@react-native-community/datetimepicker",
+      "expo-notifications"
     ],
-
     "extra": {
       "eas": {
         "projectId": "a4a9dd04-0aa5-4b1c-8474-2ffdf25d656d"
       }
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#000033",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Calendar Reminder"
     }
   }
 }

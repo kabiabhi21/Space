@@ -16,6 +16,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome } from "@expo/vector-icons";
 import EventEditor from "./EventEditor";
+import NotificationModal from "./NotificationModal";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -62,6 +63,13 @@ export default function Calendar({
     MOODS: "@calendar_moods",
     DATE_COLORS: "@calendar_date_colors",
   };
+
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [currentReminderDate, setCurrentReminderDate] = useState({
+    day: "",
+    date: "",
+    selectedDate: null,
+  });
 
   useEffect(() => {
     return () => {
@@ -450,12 +458,19 @@ export default function Calendar({
           >
             <FontAwesome name="plus-square" size={24} color="white" />
           </TouchableOpacity>
+
           <TouchableOpacity
-            onPress={addReminderForSelectedDate}
+            onPress={() =>
+              addReminderForSelectedDate(
+                getDayForDate(selectedDate),
+                getOrdinalSuffix(selectedDate),
+              )
+            }
             style={styles.actionButton}
           >
             <FontAwesome name="bell" size={24} color="white" />
           </TouchableOpacity>
+
           <TouchableOpacity>
             <View style={styles.colorPickerWrapper}>
               <TouchableOpacity
@@ -540,11 +555,13 @@ export default function Calendar({
     );
   };
 
-  const addReminderForSelectedDate = () => {
-    Alert.alert(
-      "Reminder",
-      "Push notification reminders will be available in the next update!",
-    );
+  const addReminderForSelectedDate = (day, date) => {
+    setCurrentReminderDate({
+      day: day,
+      date: date,
+      selectedDate: selectedDate,
+    });
+    setShowNotificationModal(true);
   };
 
   const YearView = () => {
@@ -929,6 +946,17 @@ export default function Calendar({
           isDarkTheme={isDarkTheme}
         />
       )}
+
+      <NotificationModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        day={currentReminderDate.day}
+        date={currentReminderDate.date}
+        selectedDate={currentReminderDate.selectedDate}
+        currentYear={currentYear}
+        currentMonth={currentMonth}
+        isDarkTheme={isDarkTheme}
+      />
 
       {deleteWarningActive && (
         <View style={styles.deleteWarningOverlay}>
